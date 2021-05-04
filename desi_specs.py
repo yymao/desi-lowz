@@ -61,7 +61,7 @@ def _get_redshifts(filepath, target_ids=None):
     z2.sort(["TARGETID", "NUM_ITER"])
     z2 = unique(z2, "TARGETID", keep="last")
     q = Query() if target_ids is None else QueryMaker.isin("TARGETID", target_ids)
-    z1 = q.filter(z1, ["TARGETID", "Z", "ZERR", "ZWARN", "CHI2", "SPECTYPE"])
+    z1 = q.filter(z1, ["TARGETID", "Z", "ZERR", "ZWARN", "CHI2", "SPECTYPE", "DELTACHI2"])
     z2 = q.filter(z2, ["TARGETID", "TARGET_RA", "TARGET_DEC", "FLUX_R", "FLUX_G", "SHAPE_R", "OBSCONDITIONS", "NIGHT", "TILEID", "SV3_DESI_TARGET", "SV3_BGS_TARGET", "SV3_SCND_TARGET"])
     if len(z1) and len(z2):
         z = join(z1, z2, "TARGETID")
@@ -127,7 +127,8 @@ is_bgs_target = Query("SV3_BGS_TARGET > 0")
 is_lowz_target = Query("(SV3_SCND_TARGET >> 15) % 8 > 0")
 is_lowz = Query("Z < 0.05")
 is_galaxy = QueryMaker.equals("SPECTYPE", "GALAXY")
-def find_redshifts_and_specs(t=None, retrieve_specs=False, exclude_bgs=False, skip_redshifts=False,all_lowz=False, **kwargs):
+
+def find_redshifts_and_specs(t=None, retrieve_specs=False, skip_redshifts=False, selection=is_lowz_target, exclude_bgs=False, all_lowz=False, **kwargs):
     """
     Takes a table `t` with columns "TILEID" and "NIGHT", and all redshifts for LOWZ targets. 
     Set `exclude_bgs` to True to exclude targets that overlap with BGS. 
@@ -163,7 +164,7 @@ def find_redshifts_and_specs(t=None, retrieve_specs=False, exclude_bgs=False, sk
             raise ValueError("Nothing to do!!")
         redshifts = t
     else:
-        q = Query(is_lowz_target)
+        q = Query(selection)
         if all_lowz:
             q = q | (is_lowz & is_galaxy) 
         if exclude_bgs:
