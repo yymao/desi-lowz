@@ -78,9 +78,9 @@ def _get_specs(filepath, sorted_target_ids):
         return 
     return (
         np.asarray(target_ids_here[matched]), 
-        np.concatenate(load_fits(filepath, [2, 7, 12])),
-        np.hstack([d[matched] for d in load_fits(filepath, [3, 8, 13])]),
-        np.hstack([d[matched] for d in load_fits(filepath, [4, 9, 14])]),
+        np.concatenate(load_fits(filepath, [2, 7, 12])),  # B_WAVELENGTH, R_WAVELENGTH, Z_WAVELENGTH
+        np.hstack([d[matched] for d in load_fits(filepath, [3, 8, 13])]),  # B_FLUX, R_FLUX, Z_FLUX
+        np.hstack([d[matched] for d in load_fits(filepath, [4, 9, 14])]),  # B_IVAR, R_IVAR, Z_IVAR
     )
 
 
