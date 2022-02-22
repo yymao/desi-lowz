@@ -4,6 +4,7 @@ Author: Yao-Yuan Mao
 
 References:
 - https://github.com/desihub/desitarget
+  - https://github.com/desihub/desitarget/blob/master/py/desitarget/data/targetmask.yaml
   - https://github.com/desihub/desitarget/blob/master/py/desitarget/sv3/data/sv3_targetmask.yaml
 - https://desidatamodel.readthedocs.io
   - https://desidatamodel.readthedocs.io/en/latest/DESI_SPECTRO_REDUX/SPECPROD/tiles/GROUPTYPE/TILEID/GROUPID/redrock-SPECTROGRAPH-TILEID-GROUPID.html
@@ -22,7 +23,7 @@ __all__ = [
     "is_bright_time", "is_lowz_target", "is_bgs_target", "is_lowz", "is_galaxy",
 ]
 __author__ = "Yao-Yuan Mao"
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 
 BASE_DIR = "/global/cfs/cdirs/desi/spectro/redux/everest/tiles/cumulative"
@@ -159,11 +160,12 @@ def _get_specs(filepath, target_ids_needed=None):
         if not len(idx):
             return
 
+    # We use the order of "RBZ" before in the overlapping region we prefer R
     return (
         (target_ids if idx is None else target_ids[idx]),
-        np.concatenate(load_fits(filepath, ["{}_WAVELENGTH".format(c) for c in "BRZ"], ignore_missing=True)),
-        np.hstack(load_fits(filepath, ["{}_FLUX".format(c) for c in "BRZ"], ignore_missing=True, apply_slice=idx)),
-        np.hstack(load_fits(filepath, ["{}_IVAR".format(c) for c in "BRZ"], ignore_missing=True, apply_slice=idx)),
+        np.concatenate(load_fits(filepath, ["{}_WAVELENGTH".format(c) for c in "RBZ"], ignore_missing=True)),
+        np.hstack(load_fits(filepath, ["{}_FLUX".format(c) for c in "RBZ"], ignore_missing=True, apply_slice=idx)),
+        np.hstack(load_fits(filepath, ["{}_IVAR".format(c) for c in "RBZ"], ignore_missing=True, apply_slice=idx)),
     )
 
 
@@ -220,6 +222,10 @@ is_bgs_target = is_bgs_target_sv3 | is_bgs_target_main
 is_lowz = Query("Z < 0.05")
 is_galaxy = QueryMaker.equals("SPECTYPE", "GALAXY")
 
+WAVELENGTHS_START = 3600.0
+WAVELENGTHS_DELTA = 0.8
+WAVELENGTHS_LEN = 7781
+
 
 def find_redshifts_and_specs(t=None, retrieve_specs=False, exclude_bgs=False, skip_redshifts=False, all_lowz=False, selection=is_lowz_target, zcat_prefix="redrock", **kwargs):
     """
@@ -247,9 +253,6 @@ def find_redshifts_and_specs(t=None, retrieve_specs=False, exclude_bgs=False, sk
     if targets_known:
         t.sort(group_keys + ["TARGETID"])
 
-    redshifts = []
-    specs = []
-
     if skip_redshifts:
         if not (filenames_known and targets_known):
             raise ValueError("Must have FILENAME and TARGETID in the input table to skip redshift collection.")
@@ -263,6 +266,7 @@ def find_redshifts_and_specs(t=None, retrieve_specs=False, exclude_bgs=False, sk
         if exclude_bgs:
             q = Query(q, ~is_bgs_target)
 
+        redshifts = []
         for t1 in t.group_by(group_keys).groups:
             if filenames_known:
                 file_iter = [(zcat_prefix, _filename_to_path(t1["FILENAME"][0]))]
@@ -285,20 +289,30 @@ def find_redshifts_and_specs(t=None, retrieve_specs=False, exclude_bgs=False, sk
     if not retrieve_specs:
         return redshifts
 
+    specs = []
     for redshifts_this in redshifts.group_by(["FILENAME"]).groups:
         filepath = _filename_to_path(redshifts_this["FILENAME"][0].replace(zcat_prefix + "-", "coadd-"))
         data_this = _get_specs(filepath, redshifts_this["TARGETID"])
         if data_this is not None:
-            specs.append(data_this)
+            wl_idx = np.round((data_this[1] - WAVELENGTHS_START) / WAVELENGTHS_DELTA).astype(np.int64),
+            wl_idx, arr_idx = np.unique(wl_idx, return_index=True)
+            specs.append((
+                data_this[0],
+                wl_idx,
+                data_this[2][:, arr_idx],
+                data_this[3][:, arr_idx],
+            ))
 
     specs_id = np.concatenate([t[0] for t in specs])
-    specs_flux = np.vstack([t[2] for t in specs])
-    specs_ivar = np.vstack([t[3] for t in specs])
-    assert len(specs_id) == len(specs_flux)
-    assert len(specs_id) == len(specs_ivar)
-
-    specs_wl = specs[0][1]
-    assert all((t[1] == specs_wl).all() for t in specs)
+    specs_flux = np.zeros((len(specs_id), WAVELENGTHS_LEN), dtype=np.float32)
+    specs_ivar = np.zeros_like(specs_flux)
+    i = 0
+    for _, wl_idx, flux, ivar in specs:
+        n = len(flux)
+        specs_flux[i:i + n, wl_idx] = flux
+        specs_ivar[i:i + n, wl_idx] = ivar
+        i += n
+    specs_wl = np.linspace(WAVELENGTHS_START, WAVELENGTHS_START + WAVELENGTHS_DELTA * (WAVELENGTHS_LEN - 1), WAVELENGTHS_LEN)
 
     print("Found {} specs".format(len(specs_id)))
     if len(redshifts) == len(specs_id) and not (redshifts["TARGETID"] == specs_id).all():
@@ -307,7 +321,7 @@ def find_redshifts_and_specs(t=None, retrieve_specs=False, exclude_bgs=False, sk
     return redshifts, specs_flux, specs_ivar, specs_wl, specs_id
 
 
-def pack_for_marz(output_path, redshifts, specs_flux, specs_ivar, specs_wl, *args):
+def pack_for_marz(output_path, redshifts, specs_flux, specs_ivar, *args):
     """
     Pack redshift table and specs into marz format.
     Example usage:
@@ -315,10 +329,13 @@ def pack_for_marz(output_path, redshifts, specs_flux, specs_ivar, specs_wl, *arg
     pack_for_marz("/path/to/output.fits", *data)
     """
     if len(redshifts) != len(specs_flux):
-        raise ValueError
+        raise ValueError("redshift table and specs image have different lengths")
 
-    with np.errstate(divide="ignore", invalid="ignore"):
-        mag = 22.5 - 2.5 * np.log10(redshifts["FLUX_R"])
+    if "r_mag" in redshifts.colnames:
+        mag = redshifts["r_mag"]
+    else:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            mag = 22.5 - 2.5 * np.log10(redshifts["FLUX_R"])
 
     t = Table(
         {
@@ -329,21 +346,24 @@ def pack_for_marz(output_path, redshifts, specs_flux, specs_ivar, specs_wl, *arg
             "MAGNITUDE": mag,
         }
     )
+    scnd_target = np.where(redshifts["SCND_TARGET"] > 0, redshifts["SCND_TARGET"], redshifts["SV3_SCND_TARGET"])
     t["NAME"] = join_str_arr(
         "Z=", redshifts["Z"].astype(np.float32).astype(str),
         ",ZW=", redshifts["ZWARN"].astype(str),
-        ",T=", (np.log2(redshifts["SV3_SCND_TARGET"]) - 14).astype(np.int16).astype(str),
+        ",T=", (np.log2(scnd_target) - 14).astype(np.int16).astype(str),
     )
 
-    # VACUUM WAVELEGNTH TO AIR WAVELEGNTH
-    dwave = specs_wl / (1.0 + 2.735182e-4 + 131.4182 / specs_wl**2 + 2.76249e8 / specs_wl**4)
-
-    with np.errstate(divide="ignore"):
+    with np.errstate(divide="ignore", invalid="ignore"):
         specs_var = 1.0 / specs_ivar
 
+    primary_hdu = fits.PrimaryHDU(specs_flux, do_not_scale_image_data=True)
+    primary_hdu.header["CRVAL1"] = WAVELENGTHS_START
+    primary_hdu.header["CRPIX1"] = 0
+    primary_hdu.header["CDELT1"] = WAVELENGTHS_DELTA
+    primary_hdu.header["VACUUM"] = True
+
     fits.HDUList([
-        fits.PrimaryHDU(specs_flux, do_not_scale_image_data=True),
+        primary_hdu,
         fits.ImageHDU(specs_var, name="variance", do_not_scale_image_data=True),
-        fits.ImageHDU(dwave, name="wavelength", do_not_scale_image_data=True),
         fits.BinTableHDU(t, name="fibres"),
     ]).writeto(output_path, overwrite=True)
