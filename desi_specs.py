@@ -160,7 +160,7 @@ def _get_specs(filepath, target_ids_needed=None):
         if not len(idx):
             return
 
-    # We use the order of "RBZ" before in the overlapping region we prefer R
+    # We use the order of "RBZ" because in the overlapping regions we prefer R.
     return (
         (target_ids if idx is None else target_ids[idx]),
         np.concatenate(load_fits(filepath, ["{}_WAVELENGTH".format(c) for c in "RBZ"], ignore_missing=True)),
