@@ -47,9 +47,9 @@ def main():
     parser.add_argument('--bands', default='grz', help='Bands to select for output')
     parser.add_argument('--layer', default='ls-dr9', help='Map layer to render')
     parser.add_argument('--force', default=False, help='Overwrite existing output file?  Default is to quit.')
+    parser.add_argument('--stop-file', default='STOP', help='Filename in outdir that stops the process if exist')
     opt = parser.parse_args()
 
-    outdir = opt.outdir
     pixscale = opt.pixscale
     H = W = opt.size
     if opt.height is not None:
@@ -58,7 +58,10 @@ def main():
         W = opt.width
     bands = opt.bands
     layer = get_layer(opt.layer)
+
+    outdir = opt.outdir
     os.makedirs(outdir, exist_ok=True)
+    stop_file = os.path.join(outdir, opt.stop_file)
 
     T = Table.read(opt.table)
     if "out" not in T.colnames:
@@ -68,6 +71,8 @@ def main():
             T["out"] = np.char.add(np.char.mod("%.7f_", T["RA"]), np.char.mod("%.7f.jpg", T["DEC"]))
 
     for t in T:
+        if os.path.exists(stop_file):
+            break
         out = os.path.join(outdir, t['out'])
         ra = t['RA']
         dec = t['DEC']
