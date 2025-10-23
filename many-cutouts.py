@@ -15,17 +15,12 @@ shifter --image=dstndstn/viewer-cutouts:latest /bin/bash
 
 import sys
 
-# https://github.com/legacysurvey/imagine/blob/master/docker/cutout#L4
+# https://github.com/legacysurvey/imagine/blob/main/docker/cutouts/cutout#L4
 sys.path = [
   "/usr/lib/python3.8",
   "/usr/lib/python3.8/lib-dynload",
   "/usr/local/lib/python3.8/dist-packages",
-  "/app/src/astrometry",
-  "/app/src/tractor",
-  "/app/src/legacypipe/build/lib",
-  "/usr/lib/python38.zip",
-  "/usr/lib/python3/dist-packages",
-  "/app/imagine",
+  "/usr/local/lib/python",
 ]
 
 import os
