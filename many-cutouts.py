@@ -21,6 +21,7 @@ sys.path = [
   "/usr/lib/python3.8/lib-dynload",
   "/usr/local/lib/python3.8/dist-packages",
   "/usr/local/lib/python",
+  "/app/imagine",
 ]
 
 import os
