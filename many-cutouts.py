@@ -3,7 +3,7 @@
 """
 many-cutouts.py
 ---------------
-Modified by: Yao-Yuan Mao (yymao)
+Modified by: Yao-Yuan Mao (yymao) - Oct 22, 2025
 Modified from: https://github.com/legacysurvey/imagine/blob/master/many-cutouts.py
 Original author: Dustin Lang (dstndstn)
 
@@ -21,6 +21,7 @@ sys.path = [
   "/usr/lib/python3.8/lib-dynload",
   "/usr/local/lib/python3.8/dist-packages",
   "/usr/local/lib/python",
+  "/app/src/legacypipe/py",
   "/app/imagine",
 ]
 
