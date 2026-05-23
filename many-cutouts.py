@@ -3,7 +3,7 @@
 """
 many-cutouts.py
 ---------------
-Modified by: Yao-Yuan Mao (yymao) - Oct 22, 2025
+Modified by: Yao-Yuan Mao (yymao) - May 23, 2026
 Modified from: https://github.com/legacysurvey/imagine/blob/master/many-cutouts.py
 Original author: Dustin Lang (dstndstn)
 
@@ -43,7 +43,8 @@ def main():
     parser.add_argument('--height', type=int, default=None, help='Pixel height of output')
     parser.add_argument('--bands', default='grz', help='Bands to select for output')
     parser.add_argument('--layer', default='ls-dr9', help='Map layer to render')
-    parser.add_argument('--force', default=False, help='Overwrite existing output file?  Default is to quit.')
+    parser.add_argument('--overwrite', '--force', action='store_true', help='Overwrite existing output file?  Default is false.')
+    parser.add_argument('--fits', action='store_true', help='Output FITS files instead of JPEGs')
     parser.add_argument('--stop-file', default='STOP', help='Filename in outdir that stops the process if exist')
     opt = parser.parse_args()
 
@@ -61,11 +62,12 @@ def main():
     stop_file = os.path.join(outdir, opt.stop_file)
 
     T = Table.read(opt.table)
+    extension = 'fits' if opt.fits else 'jpg'
     if "out" not in T.colnames:
         if 'OBJID' in T.colnames:
-            T["out"] = np.char.mod("%d.jpg", T["OBJID"])
+            T["out"] = np.char.mod(f"%d.{extension}", T["OBJID"])
         else:
-            T["out"] = np.char.add(np.char.mod("%.7f_", T["RA"]), np.char.mod("%.7f.jpg", T["DEC"]))
+            T["out"] = np.char.add(np.char.mod("%.7f_", T["RA"]), np.char.mod(f"%.7f.{extension}", T["DEC"]))
 
     for t in T:
         if os.path.exists(stop_file):
@@ -74,14 +76,14 @@ def main():
         ra = t['RA']
         dec = t['DEC']
 
-        if os.path.exists(out) and not opt.force:
+        if os.path.exists(out) and not opt.overwrite:
             print('Exists:', out)
             continue
 
         tempfiles = []
         try:
             layer.write_cutout(ra, dec, pixscale, W, H, out,
-                               bands=bands, fits=False, jpeg=True, tempfiles=tempfiles)
+                               bands=bands, fits=opt.fits, jpeg=(not opt.fits), tempfiles=tempfiles)
         except NoOverlapError:
             print('No overlap with {} ({}, {})'.format(out, ra, dec))
         except Exception as e:
@@ -95,4 +97,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
